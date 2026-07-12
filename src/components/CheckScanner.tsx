@@ -3,6 +3,14 @@ import axios from "axios";
 import { toast, Toaster } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import {
   UploadCloud,
   Image as ImageIcon,
@@ -280,7 +288,7 @@ export function CheckScanner() {
                 <StatusBadge status={status} />
               </div>
 
-              <div className="flex-1 overflow-hidden rounded-lg border bg-muted/30">
+              <div className="flex-1 overflow-y-auto overflow-x-hidden rounded-lg border bg-muted/30 p-4">
                 {status === "loading" && (
                   <div className="flex h-full min-h-[400px] flex-col items-center justify-center gap-3 text-muted-foreground">
                     <Loader2 className="h-6 w-6 animate-spin" />
@@ -293,27 +301,55 @@ export function CheckScanner() {
                     <p className="text-xs text-muted-foreground">{errorMsg}</p>
                   </div>
                 )}
-                {status !== "loading" && status !== "error" && (
-                  <pre className="h-full max-h-[520px] overflow-auto p-4 text-xs leading-relaxed">
-                    {jsonString || (
-                      <span className="text-muted-foreground">
-                        Run “Analyze Check” to view the Azure response here.
-                      </span>
-                    )}
-                  </pre>
+                {status !== "loading" && status !== "error" && !result && (
+                  <div className="flex h-full min-h-[400px] flex-col items-center justify-center gap-2 p-6 text-center text-muted-foreground">
+                    <p className="text-sm">Run “Analyze Check” to view the Azure response here.</p>
+                  </div>
                 )}
-              </div>
+                {status !== "loading" && status !== "error" && result && (
+                  <div className="flex flex-col gap-6">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <CheckField label="Check Number" data={getField(result, "CheckNumber")} />
+                      <CheckField label="Date" data={getField(result, "Date")} />
+                      <CheckField label="Bank Name" data={getField(result, "BankName")} />
+                      <CheckField label="Branch" data={getField(result, "BankAddress")} />
+                      <CheckField label="Payee" data={getField(result, "PayeeName")} />
+                      <CheckField label="Amount" data={getField(result, "Amount")} />
+                      <CheckField className="md:col-span-2" label="Amount in Words" data={getField(result, "AmountInWords")} />
+                      <CheckField label="Account Number" data={getField(result, "AccountNumber")} />
+                      <CheckField label="Routing Number" data={getField(result, "RoutingNumber")} />
+                      <CheckField label="MICR" data={getField(result, "MicrNumber")} />
+                      <CheckField label="Memo" data={getField(result, "Memo")} />
+                      <CheckField label="Signature Detected" data={getField(result, "Signature")} />
+                    </div>
 
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button variant="outline" onClick={copyJson} disabled={!result}>
-                  <Copy className="mr-2 h-4 w-4" /> Copy JSON
-                </Button>
-                <Button variant="outline" onClick={downloadJson} disabled={!result}>
-                  <Download className="mr-2 h-4 w-4" /> Download JSON
-                </Button>
-                <Button onClick={sendJson} disabled={!result}>
-                  <Send className="mr-2 h-4 w-4" /> Send JSON
-                </Button>
+                    <Accordion type="single" collapsible className="w-full">
+                      <AccordionItem value="raw-json" className="border-none">
+                        <AccordionTrigger className="rounded-md border bg-background px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 data-[state=open]:rounded-b-none">
+                          View Raw Azure JSON Response
+                        </AccordionTrigger>
+                        <AccordionContent className="rounded-b-md border border-t-0 bg-background pt-0">
+                          <div className="group relative overflow-hidden bg-muted/30">
+                            <div className="absolute right-3 top-3 flex gap-2">
+                              <Button variant="secondary" size="sm" onClick={copyJson} className="h-8 shadow-sm">
+                                <Copy className="mr-1.5 h-3.5 w-3.5" /> Copy
+                              </Button>
+                              <Button variant="secondary" size="sm" onClick={downloadJson} className="h-8 shadow-sm">
+                                <Download className="mr-1.5 h-3.5 w-3.5" /> Download
+                              </Button>
+                              <Button variant="secondary" size="sm" onClick={sendJson} className="h-8 shadow-sm">
+                                <Send className="mr-1.5 h-3.5 w-3.5" /> Send
+                              </Button>
+                            </div>
+                            <pre className="max-h-[300px] overflow-auto p-4 pt-14 text-xs leading-relaxed">
+                              {jsonString}
+                            </pre>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
+                  </div>
+                )}
               </div>
             </Card>
           </div>
@@ -324,6 +360,192 @@ export function CheckScanner() {
           <code>backend/.env</code>.
         </p>
       </main>
+    </div>
+  );
+}
+
+function getField(result: any, fieldId: string) {
+  // 1. Search in documents[].fields first (for prebuilt-check)
+  const docs = result?.analyzeResult?.documents || result?.documents || [];
+  for (const doc of docs) {
+    if (doc.fields && doc.fields[fieldId]) {
+      const field = doc.fields[fieldId];
+      let val = field.content || field.valueString || field.valueDate || field.valueNumber;
+      if (field.type === "signature") {
+        val = field.valueSignature === "signed" ? "Signature Present" : "Unsigned";
+      }
+      return { value: val, confidence: field.confidence };
+    }
+  }
+
+  // 2. Fallbacks using keyValuePairs and lines for prebuilt-document
+  const kvps = result?.analyzeResult?.keyValuePairs || result?.keyValuePairs || [];
+  const findKVP = (regex: RegExp) => {
+    const match = kvps.find((k: any) => k.key?.content && regex.test(k.key.content));
+    return match?.value?.content ? { value: match.value.content, confidence: match.confidence } : null;
+  };
+
+  const lines = result?.analyzeResult?.pages?.[0]?.lines || result?.pages?.[0]?.lines || [];
+  const findLine = (regex: RegExp) => {
+    const match = lines.find((l: any) => regex.test(l.content));
+    return match ? { value: match.content, confidence: undefined } : null;
+  };
+
+  let res: { value: string | undefined | null, confidence?: number } | null = null;
+
+  switch(fieldId) {
+    case "CheckNumber":
+      res = findKVP(/check.*no|check.*num/i);
+      if (!res) {
+        const micrMatch = findLine(/⑆.*?⑈\s*(\d+)/);
+        if (micrMatch) res = { value: micrMatch.value.match(/⑆.*?⑈\s*(\d+)/)?.[1], confidence: undefined };
+        else {
+          const numMatch = findLine(/^\d{3,4}$/);
+          if (numMatch) res = numMatch;
+        }
+      }
+      break;
+    case "Date":
+      res = findKVP(/date/i);
+      if (res && res.value) res.value = res.value.split('\n')[0].trim();
+      if (!res || !res.value || res.value.length < 4) {
+        res = findLine(/^\d{4}\d{2}\d{2}$|^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/);
+      }
+      break;
+    case "BankName":
+      res = findKVP(/bank name/i);
+      if (!res) {
+        const bankLine = findLine(/bank/i);
+        if (bankLine && bankLine.value) {
+          const parts = bankLine.value.split(',');
+          const partWithBank = parts.find((p: string) => /bank/i.test(p));
+          if (partWithBank) {
+            const match = partWithBank.match(/([A-Z\s]+BANK[\sA-Z]*)/i);
+            res = { value: match ? match[1].trim() : partWithBank.trim(), confidence: undefined };
+          }
+        }
+      }
+      break;
+    case "Branch":
+      res = findKVP(/branch/i);
+      if (!res) {
+        const branchLine = findLine(/branch/i);
+        if (branchLine && branchLine.value) {
+          const parts = branchLine.value.split(',');
+          const partWithBranch = parts.find((p: string) => /branch/i.test(p));
+          res = { value: partWithBranch ? partWithBranch.trim() : branchLine.value, confidence: undefined };
+        }
+      }
+      break;
+    case "PayeeName":
+      res = findKVP(/pay\s*to/i);
+      let payeeCandidate = null;
+      if (res && res.value) {
+        const parts = res.value.split('\n');
+        payeeCandidate = parts.find((p: string) => !/^\$|hundred|dollars/i.test(p) && p.trim().length > 3);
+      }
+      if (payeeCandidate) {
+        const fullLine = findLine(new RegExp(payeeCandidate.trim(), "i"));
+        res = { value: fullLine ? fullLine.value : payeeCandidate.trim(), confidence: res?.confidence };
+      } else {
+        const foundationLine = findLine(/foundation|llc|inc/i);
+        if (foundationLine) res = { value: foundationLine.value, confidence: undefined };
+        else res = null;
+      }
+      break;
+    case "Amount":
+      res = findKVP(/amount/i);
+      if (!res) {
+        const amtLine = findLine(/^\$?\s*\d+\.\d{2}$/);
+        if (amtLine) res = amtLine;
+        else {
+          const valWithDollar = findLine(/\$\s*\d+\.\d{2}/);
+          if (valWithDollar && valWithDollar.value) {
+             const m = valWithDollar.value.match(/\$\s*(\d+\.\d{2})/);
+             res = { value: m ? m[1] : valWithDollar.value, confidence: undefined };
+          }
+        }
+      }
+      if (res && res.value && res.value.includes('\n')) {
+        const amtPart = res.value.split('\n').find((p:string) => /\d+\.\d{2}/.test(p));
+        if (amtPart) res.value = amtPart.trim();
+      }
+      break;
+    case "AmountInWords":
+      res = findKVP(/dollars/i);
+      if (!res) {
+        const wordsLines = lines.filter((l: any) => /dollars|hundred|thousand/i.test(l.content) && !/\$\d/.test(l.content));
+        if (wordsLines.length > 0) {
+           const longest = wordsLines.reduce((a:any, b:any) => a.content.length > b.content.length ? a : b);
+           res = { value: longest.content, confidence: undefined };
+        }
+      }
+      break;
+    case "AccountNumber":
+      res = findKVP(/account/i);
+      if (!res) {
+        const micrLine = findLine(/⑆/);
+        if (micrLine && micrLine.value) {
+          const match = micrLine.value.match(/⑆.*?⑆\s*(\d+)⑈/);
+          if (match) res = { value: match[1], confidence: undefined };
+        }
+      }
+      break;
+    case "RoutingNumber":
+      res = findKVP(/routing/i);
+      if (!res) {
+        const micrLine = findLine(/⑆/);
+        if (micrLine && micrLine.value) {
+          const match = micrLine.value.match(/⑆(\d+)⑆/);
+          if (match) res = { value: match[1], confidence: undefined };
+        }
+      }
+      break;
+    case "MicrNumber":
+      res = findLine(/⑆/);
+      break;
+    case "Memo":
+      res = findKVP(/memo/i);
+      if (res && res.value && /⑆/.test(res.value)) res = null; 
+      if (!res) {
+        const memoLine = findLine(/^memo/i);
+        if (memoLine && memoLine.value) res = { value: memoLine.value.replace(/^memo\s*/i, '').trim(), confidence: undefined };
+      }
+      break;
+    case "Signature":
+      const styles = result?.analyzeResult?.styles || result?.styles || [];
+      const handwritten = styles.filter((s: any) => s.isHandwritten);
+      if (handwritten.length > 0) res = { value: "Signature Present", confidence: handwritten[0].confidence || undefined };
+      break;
+  }
+
+  return res && res.value ? { value: res.value, confidence: res.confidence } : null;
+}
+
+function CheckField({ label, data, className }: { label: string, data: any, className?: string }) {
+  const isEstimated = data && data.confidence === undefined;
+  const confValue = data?.confidence !== undefined ? data.confidence : 0.85; 
+  const confPercent = Math.round(confValue * 100);
+  
+  let badgeClass = "bg-emerald-100 text-emerald-800 border-emerald-200";
+  if (confPercent < 60) badgeClass = "bg-red-100 text-red-800 border-red-200";
+  else if (confPercent < 80) badgeClass = "bg-yellow-100 text-yellow-800 border-yellow-200";
+
+  return (
+    <div className={`flex flex-col gap-1.5 ${className || ""}`}>
+      <Label className="ml-1 text-xs font-semibold text-muted-foreground">{label}</Label>
+      <div className="relative">
+        <Input 
+          readOnly 
+          value={data?.value || "Not detected"} 
+          className="bg-background pr-20 text-sm font-medium focus-visible:ring-0 focus-visible:ring-offset-0" 
+        />
+        {data?.value && (
+          <div className={`absolute right-2 top-1/2 -translate-y-1/2 rounded border px-1.5 py-0.5 text-[10px] font-bold ${badgeClass}`}>
+            {isEstimated ? "Estimated" : `${confPercent}%`}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
