@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: pocket-bank-scan-backend
+    runtime: node
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT
+        sync: false  # Set manually in Render dashboard
+      - key: AZURE_DOCUMENT_INTELLIGENCE_API_KEY
+        sync: false  # Set manually in Render dashboard
+      - key: FRONTEND_URL
+        sync: false  # e.g. https://your-app.vercel.app
+      - key: PORT
+        value: 10000
+    healthCheckPath: /health

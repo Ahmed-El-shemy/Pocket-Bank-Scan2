@@ -24,8 +24,8 @@ import {
   Lock,
 } from "lucide-react";
 
-const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "http://localhost:5000";
-const FORWARD_URL = "https://example.com/api/check";
+const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
+const FORWARD_URL = (import.meta.env.VITE_FORWARD_URL as string | undefined) ?? "";
 const MAX_BYTES = 20 * 1024 * 1024;
 const ALLOWED = ["image/png", "image/jpeg", "image/jpg"] as const;
 
